@@ -5,6 +5,7 @@ import com.google.gson.Gson
 import com.ak.pim.model.PimDataRequest
 import com.ak.pim.model.PimResponse
 import com.ak.pim.model.PromptRequest
+import com.ak.pim.model.Parameters
 import okhttp3.*
 import android.content.Context
 import android.util.Log
@@ -114,22 +115,6 @@ class WebSocketClient {
         responseChannel.close()
     }
 }
-
-data class PimResponse(
-    val service: String,
-    val parameters: Parameters,
-    val data: List<Map<String, Any>>? = null
-)
-
-data class Parameters(
-    val fields: List<String>,
-    val filter: String,
-    val selectionArgs: List<String>,
-    val sort: String,
-    val limit: Int
-)
-
-
 //webSocket?.close(1000, "Client disconnect")
 //Means: “If webSocket exists, call close. If it’s null, do nothing.”
 //

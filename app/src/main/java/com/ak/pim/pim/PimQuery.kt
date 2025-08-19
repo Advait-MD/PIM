@@ -4,10 +4,15 @@ import android.content.ContentResolver
 import android.database.Cursor
 import android.provider.CalendarContract
 import android.provider.ContactsContract
+import android.util.Log
 import com.ak.pim.model.Parameters
+
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
+
+private const val TAG = "PimQuery"
 
 fun queryPimService(
     contentResolver: ContentResolver,
@@ -31,7 +36,7 @@ fun queryPimService(
         )
 
         "contacts" -> {
-            // choose URI based on requested fields
+            // Basic contact handling (phone or email)
             val wantsPhone = parameters.fields.any { it.equals("phone_number", true) }
             val wantsEmail = parameters.fields.any { it.equals("email", true) }
 
@@ -49,29 +54,17 @@ fun queryPimService(
                     )
                 }
                 else -> {
-                    // simplest fallback: phone table (you can extend to merge phone+email later)
+                    // fallback: phone table
                     ContactsContract.CommonDataKinds.Phone.CONTENT_URI to mapOf(
                         "display_name" to ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
-                        "phone_number" to ContactsContract.CommonDataKinds.Phone.NUMBER
+                        "phone_number" to ContactsContract.CommonDataKinds.Phone.NUMBER,
+                        "email" to ContactsContract.CommonDataKinds.Email.ADDRESS
                     )
                 }
             }
 
             queryGeneric(contentResolver, uri, parameters, userPrompt, fieldMap)
         }
-
-
-        //"contacts" -> queryGeneric(
-          //  contentResolver,
-            //ContactsContract.CommonDataKinds.Email.CONTENT_URI,
-            //parameters,
-            //userPrompt,
-            //fieldMap = mapOf(
-              //  "name" to ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
-              //  "email" to ContactsContract.CommonDataKinds.Email.ADDRESS,
-              //  "phone" to ContactsContract.CommonDataKinds.Phone.NUMBER
-           // )
-       // )
 
         "alarm", "reminder" -> queryGeneric(
             contentResolver,
@@ -91,6 +84,8 @@ fun queryPimService(
 
 /**
  * Generic query runner for PIM services
+ * - uses parameters.selectionArgs if present (preferred)
+ * - otherwise falls back to parseFilter(...) generating args heuristically
  */
 private fun queryGeneric(
     contentResolver: ContentResolver,
@@ -101,12 +96,31 @@ private fun queryGeneric(
 ): List<Map<String, Any>> {
     val results = mutableListOf<Map<String, Any>>()
 
+    // projection: map abstract field -> real column name
     val projection = parameters.fields.map { field ->
         fieldMap[field] ?: throw IllegalArgumentException("Unknown field: $field")
     }.toTypedArray()
 
-    val (selection, selectionArgs) = parseFilter(parameters.filter, userPrompt, fieldMap)
+    // Decide selection & args: backend selectionArgs (preferred) or local parser fallback
+    // Decide selection & args: backend selectionArgs (preferred) or local parser fallback
+    var selection: String = ""               // default empty string
+    var selectionArgs: Array<String>? = null // default null
+
+    if (!parameters.selectionArgs.isNullOrEmpty()) {
+        // Use backend’s filter
+        selection = parameters.filter.replaceFieldNames(fieldMap)
+        selectionArgs = parameters.selectionArgs.map { resolveSelectionArg(it) }.toTypedArray()
+    } else {
+        val pair = parseFilter(filter = parameters.filter, userPrompt, fieldMap)
+        selection = pair.first
+        selectionArgs = pair.second
+    }
+
+
+    // Convert sort (abstract names) to real column names
     val sortOrder = parameters.sort.replaceFieldNames(fieldMap)
+
+    Log.d(TAG, "Querying URI=$uri projection=${projection.contentToString()} selection=\"$selection\" args=${selectionArgs?.contentToString()} sort=\"$sortOrder\" limit=${parameters.limit}")
 
     val cursor: Cursor? = contentResolver.query(
         uri,
@@ -127,19 +141,66 @@ private fun queryGeneric(
                     row[field] = when (it.getType(index)) {
                         Cursor.FIELD_TYPE_STRING -> it.getString(index) ?: ""
                         Cursor.FIELD_TYPE_INTEGER -> it.getLong(index)
+                        Cursor.FIELD_TYPE_FLOAT -> it.getDouble(index)
+                        Cursor.FIELD_TYPE_NULL -> ""
                         else -> it.getString(index) ?: ""
                     }
+                } else {
+                    // column not found — put empty string to keep shape stable
+                    row[field] = ""
                 }
             }
             results.add(row)
             count++
         }
     }
+
     return results
 }
 
 /**
- * Converts backend filter string + userPrompt into selection + args
+ * Convert backend selectionArg tokens into actual values used by ContentResolver:
+ * - if arg is an ISO timestamp (ends with Z) -> convert to epoch millis
+ * - if arg starts/contains % -> treat as LIKE pattern (pass as-is)
+ * - known tokens: START_OF_NEXT_WEEK, END_OF_NEXT_WEEK
+ * - fallback: return arg unchanged
+ */
+private fun resolveSelectionArg(arg: String): String {
+    val s = arg.trim()
+    // LIKE pattern or contains % => leave as-is
+    if (s.contains("%")) return s
+
+    // ISO timestamp like 2024-03-04T00:00:00Z
+    val isoRegex = Regex("\\d{4}-\\d{2}-\\d{2}T.*Z")
+    if (isoRegex.matches(s)) {
+        return s.toTimestamp().toString()
+    }
+
+    when (s.uppercase(Locale.US)) {
+        "START_OF_NEXT_WEEK" -> {
+            val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+            // move to start of next week (Monday 00:00) — use ISO week assumptions
+            cal.add(Calendar.WEEK_OF_YEAR, 1)
+            // set to first day of week (Mon) - ensure Monday
+            cal.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+            cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
+            return cal.timeInMillis.toString()
+        }
+        "END_OF_NEXT_WEEK" -> {
+            val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+            cal.add(Calendar.WEEK_OF_YEAR, 1)
+            cal.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+            cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
+            val end = cal.timeInMillis + 7L * 24 * 60 * 60 * 1000 - 1
+            return end.toString()
+        }
+        else -> return s
+    }
+}
+
+/**
+ * The existing parseFilter fallback: creates selection and args heuristically from a filter template
+ * (keeps your earlier behavior for compatibility when backend doesn't send selectionArgs)
  */
 private fun parseFilter(
     filter: String,
@@ -155,71 +216,32 @@ private fun parseFilter(
 
     val args = mutableListOf<String>()
     parts.forEach { raw ->
-        // Normalize the part to real column names so matching works regardless of abstract vs real
         val part = raw.replaceFieldNames(fieldMap).lowercase(Locale.US)
 
         when {
-            // title/display name LIKE ?
             part.contains(" like ?") && (part.contains("title") || part.contains("display_name")) -> {
                 val quoted = Regex("\"([^\"]+)\"").find(userPrompt)?.groupValues?.get(1)
                 val token = quoted ?: userPrompt.split(" ").firstOrNull { it.length > 2 } ?: ""
                 args.add("%$token%")
             }
 
-            // start >= ?
             (part.contains("dtstart") || part.contains("start_date")) && part.contains(">= ?") -> {
                 args.add(System.currentTimeMillis().toString())
             }
 
-            // end <= ?
             (part.contains("dtend") || part.contains("end_date")) && part.contains("<= ?") -> {
                 val oneWeekLater = System.currentTimeMillis() + 7L * 24 * 60 * 60 * 1000
                 args.add(oneWeekLater.toString())
+            }
+
+            part.contains("display_name like ?") -> {
+                val keyword = userPrompt.split(" ").find { it.length > 2 }?.let { "%$it%" } ?: "%"
+                args.add(keyword)
             }
         }
     }
     return selection to args.toTypedArray()
 }
-
-//private fun parseFilter(
-  //  filter: String,
-    //userPrompt: String,
-    //fieldMap: Map<String, String>
-//): Pair<String, Array<String>> {
-  //  val parts = filter.split(" AND ")
-    //val selection = parts.joinToString(" AND ") { expr ->
-      //  expr.replaceFieldNames(fieldMap)
-    //}
-    //val args = mutableListOf<String>()
-
-    //for (part in parts) {
-      //  when {
-        //    part.contains("LIKE ?") -> {
-          //      val keyword = when {
-            //        userPrompt.contains("holiday", true) -> "%holiday%"
-              //      userPrompt.contains("meeting", true) -> "%meeting%"
-                //    else -> "%${userPrompt.split(" ").firstOrNull() ?: ""}%"
-                //}
-                //args.add(keyword)
-     //       }
-
-       //     part.contains(">= ?") && part.contains("DTSTART") -> {
-         //       args.add(System.currentTimeMillis().toString()) // now
-           // }
-
-            //part.contains("<= ?") && part.contains("DTSTART") -> {
-              //  val oneWeekLater = System.currentTimeMillis() + 7 * 24 * 60 * 60 * 1000
-                //args.add(oneWeekLater.toString())
-            //}
-
-           // part.contains("DISPLAY_NAME LIKE ?") -> {
-             //   val keyword = userPrompt.split(" ").find { it.length > 2 }?.let { "%$it%" } ?: "%"
-               // args.add(keyword)
-            //}
-        //}
-    //}
-    //return selection to args.toTypedArray()
-//}
 
 /**
  * Helpers

@@ -51,7 +51,7 @@ class MainActivity : AppCompatActivity() {
         if (notGranted.isNotEmpty()) {
             requestPermissionsLauncher.launch(notGranted.toTypedArray())
         } else {
-            fetchAndProcessPrompt("call HPTU Gaurav Pathania")
+            fetchAndProcessPrompt("date of next sunday")
         }
     }
 
@@ -63,6 +63,9 @@ class MainActivity : AppCompatActivity() {
 
                 if (response != null) {
                     Log.d(TAG, "Received parameters: $response")
+
+                    Log.d(TAG, "About to query service=${response.service} with parameters=${response.parameters}")
+
 
                     val extractedData = queryPimService(
                         contentResolver,
