@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "209223281507",
+    "project_id": "pims-8b38b",
+    "storage_bucket": "pims-8b38b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:209223281507:android:e50576c2262e7a549cc156",
+        "android_client_info": {
+          "package_name": "com.ak.pim"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBlqrhi0LaBVdCzdmIzGAupIH2G_vFHd1Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
