@@ -5,6 +5,7 @@ import com.google.gson.Gson
 import com.ak.pim.model.PimDataRequest
 import com.ak.pim.model.PimResponse
 import com.ak.pim.model.PromptRequest
+import com.ak.pim.pim.queryPimService
 import com.ak.pim.model.Parameters
 import okhttp3.*
 import android.content.Context
@@ -13,8 +14,14 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
-class WebSocketClient {
+private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+
+class WebSocketClient(private val context: Context) {
     private val TAG = "WebSocketClient"
     private val gson = Gson()
     private var webSocket: WebSocket? = null
@@ -40,16 +47,36 @@ class WebSocketClient {
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                Log.d("WebSocketClient", "Raw message: $text")
-                try {
-                    val response = Gson().fromJson(text, PimResponse::class.java)
-                    Log.d("WebSocketClient", "Parsed PimResponse: $response")
-                    responseChannel.trySend(response)
-                } catch (e: Exception) {
-                    Log.e("WebSocketClient", "Failed to parse PimResponse: ${e.message}", e)
-                    responseChannel.close(e)
+                coroutineScope.launch {
+                    try {
+                        val pimResponse = Gson().fromJson(text, PimResponse::class.java)
+
+                        // Run the query
+                        val result = queryPimService(
+                            context.contentResolver,
+                            pimResponse.service,
+                            pimResponse.parameters,
+                            "default_prompt"
+                        )
+
+                        // Create response object
+                        val response = PimResponse(
+                            pimResponse.service,
+                            pimResponse.parameters,
+                            result
+                        )
+
+                        // Send back to backend
+                        val jsonResponse = Gson().toJson(response)
+                        webSocket.send(jsonResponse)
+
+                    } catch (e: Exception) {
+                        Log.e("WebSocketClient", "Error parsing or querying", e)
+                    }
                 }
             }
+
+
 
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {

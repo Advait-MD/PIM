@@ -14,8 +14,9 @@ import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
+
     private val TAG = "MainActivity"
-    private val webSocketClient = WebSocketClient()
+    private val webSocketClient = WebSocketClient(this)
 
     // Register permission launcher
     private val requestPermissionsLauncher =
