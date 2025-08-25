@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">Lottie</string>
+    <string name="app_name">Vesper</string>
     <string name="websocket_url">ws://192.168.31.184:8000/ws</string>
 </resources>

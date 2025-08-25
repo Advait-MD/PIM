@@ -43,6 +43,9 @@ class WebSocketClient(private val listener: ConnectionListener) {
         })
     }
 
+    fun sendMessage(message: String) {
+        webSocket?.send(message)
+    }
     fun disconnect() {
         webSocket?.close(1000, "User disconnected")
     }
