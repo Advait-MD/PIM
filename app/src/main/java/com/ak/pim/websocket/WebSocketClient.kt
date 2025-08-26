@@ -12,6 +12,7 @@ class WebSocketClient(private val listener: ConnectionListener) {
     interface ConnectionListener {
         fun onConnected()
         fun onDisconnected()
+        fun onMessageReceived(text: String)
     }
 
     fun connect() {
@@ -28,6 +29,7 @@ class WebSocketClient(private val listener: ConnectionListener) {
 
             override fun onMessage(webSocket: WebSocket, text: String) {
                 Log.d("WebSocket", "Received: $text")
+                listener.onMessageReceived(text)
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {

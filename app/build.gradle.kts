@@ -40,6 +40,7 @@ android {
 }
 
 dependencies {
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("org.java-websocket:Java-WebSocket:1.5.6")
     implementation("androidx.appcompat:appcompat:1.7.0")
