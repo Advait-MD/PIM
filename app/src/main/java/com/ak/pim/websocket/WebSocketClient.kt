@@ -17,7 +17,7 @@ class WebSocketClient(private val listener: ConnectionListener) {
 
     fun connect() {
         val request = Request.Builder()
-            .url("ws://192.168.31.184:8000/ws") // 10.0.2.2 = localhost for Android emulator
+            .url("wss://---.---.--.--/ws") // 10.0.2.2 = localhost for Android emulator
             .build()
 
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
