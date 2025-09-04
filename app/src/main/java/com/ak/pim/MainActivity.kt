@@ -27,10 +27,10 @@ class MainActivity : AppCompatActivity(), WebSocketClient.ConnectionListener {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        statusText   = findViewById(R.id.statusText)
+        statusText = findViewById(R.id.statusText)
         inputMessage = findViewById(R.id.inputMessage)
-        sendButton   = findViewById(R.id.sendButton)
-        recycler     = findViewById(R.id.recyclerMessages)
+        sendButton = findViewById(R.id.sendButton)
+        recycler = findViewById(R.id.recyclerMessages)
 
         adapter = MessageAdapter(messages)
         recycler.adapter = adapter
@@ -58,7 +58,10 @@ class MainActivity : AppCompatActivity(), WebSocketClient.ConnectionListener {
             recycler.scrollToPosition(messages.size - 1)
 
             // send to backend
-            try { wsClient.sendMessage(text) } catch (_: Exception) {}
+            try {
+                wsClient.sendMessage(text)
+            } catch (_: Exception) {
+            }
 
             inputMessage.setText("")
         }
@@ -81,8 +84,4 @@ class MainActivity : AppCompatActivity(), WebSocketClient.ConnectionListener {
         }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        wsClient.disconnect()
-    }
 }
